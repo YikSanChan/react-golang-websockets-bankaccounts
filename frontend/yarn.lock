@@ -8533,6 +8533,11 @@ react-scripts@3.4.1:
   optionalDependencies:
     fsevents "2.1.2"
 
+react-use-websocket@^1.7.2:
+  version "1.7.2"
+  resolved "https://registry.yarnpkg.com/react-use-websocket/-/react-use-websocket-1.7.2.tgz#4061e77b37e255121919a290a394c58be85d0f8d"
+  integrity sha512-fydaDtpU1wuAfqFagJI7r5i0F4RVI+DuKv4DQq/jGTSLXmPqQuLBYIOJJWhmM9t+7StyteIs8Dlui4Mxhbz7hw==
+
 react@^16.13.1:
   version "16.13.1"
   resolved "https://registry.yarnpkg.com/react/-/react-16.13.1.tgz#2e818822f1a9743122c063d6410d85c1e3afe48e"

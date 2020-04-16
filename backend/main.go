@@ -2,16 +2,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 type Handler struct {
 	balance int
+	hub     *Hub
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
@@ -52,14 +54,42 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	}
 	h.balance += deposit
 	w.WriteHeader(http.StatusOK)
+
+	for client, ok := range h.hub.clients {
+		if !ok {
+			continue
+		}
+		client.notify()
+	}
+
 	return
+}
+
+// serveWs handles websocket requests from the peer.
+func (h *Handler) ServeWs(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	client := &Client{hub: h.hub, conn: conn, send: make(chan []byte, 256)}
+	client.hub.register <- client
+
+	// Allow collection of memory referenced by the caller by doing all work in
+	// new goroutines.
+	go client.writePump()
 }
 
 func main() {
 	router := mux.NewRouter()
+	hub := newHub()
 	handler := Handler{
 		balance: 42,
+		hub:     hub,
 	}
+	go hub.run()
+
+	router.HandleFunc("/ws", handler.ServeWs)
 	router.HandleFunc("/balance", handler.GetBalance)
 	router.HandleFunc("/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
 	router.Use(mux.CORSMethodMiddleware(router))
