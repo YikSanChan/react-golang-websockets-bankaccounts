@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import useWebSocket, { ReadyState } from "react-use-websocket";
+import { useParams } from "react-router-dom";
 
 const SOCKET_URL = "ws://localhost:8080/ws";
 const CONNECTION_STATUSES = {
@@ -10,11 +11,12 @@ const CONNECTION_STATUSES = {
 };
 
 const BankAccount = () => {
+  const { account_id } = useParams();
   const [balance, setBalance] = useState<number | null>(null);
   const [deposit, setDeposit] = useState<number>(0);
 
   const [sendMessage, lastMessage, readyState, getWebSocket] = useWebSocket(
-    SOCKET_URL
+    `${SOCKET_URL}/${account_id}`
   );
 
   const connectionStatus = CONNECTION_STATUSES[readyState];
@@ -30,7 +32,9 @@ const BankAccount = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const response = await fetch("http://localhost:8080/balance");
+      const response = await fetch(
+        `http://localhost:8080/account/${account_id}/balance`
+      );
       const data = await response.json(); // {"balance": 42}
       setBalance(data.balance);
     };
@@ -39,18 +43,24 @@ const BankAccount = () => {
 
   // @ts-ignore
   const handleDeposit = async (event) => {
-    const response = await fetch("http://localhost:8080/deposit/" + deposit, {
-      method: "POST",
-    });
+    const response = await fetch(
+      `http://localhost:8080/account/${account_id}/deposit/${deposit}`,
+      {
+        method: "POST",
+      }
+    );
     await response.json();
     event.preventDefault();
   };
 
+  console.log("re-render");
+
   return (
     <div>
+      <h2>Account {account_id}</h2>
       <div>The WebSocket is currently {connectionStatus}</div>
       {lastMessage ? <div>Last message: {lastMessage.data}</div> : null}
-      <div>Your balance is {balance || "unknown"}</div>
+      <div>Your balance is {balance === null ? "unknown" : balance}</div>
       <form onSubmit={handleDeposit}>
         <label>
           Deposit:
