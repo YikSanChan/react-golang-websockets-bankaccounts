@@ -68,6 +68,4 @@ const BankAccount = () => {
   );
 };
 
-const App = () => <BankAccount />;
-
-export default App;
+export default BankAccount;
