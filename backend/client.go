@@ -97,7 +97,7 @@ func (c *Client) writePump() {
 	}
 }
 
-func(c *Client) notify() {
+func(c *Client) notify(topic string) {
 	log.Println("notify")
-	c.hub.broadcast <- space
+	c.hub.broadcast <- TopicMessage{message: space, topic: topic}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 type Handler struct {
-	balance int
+	balance map[int]int
 	hub     *Hub
 }
 
@@ -30,7 +30,14 @@ func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	body := fmt.Sprintf("{\"balance\": %d}", h.balance)
+	vars := mux.Vars(r)
+	accountId, err := strconv.Atoi(vars["account_id"])
+	if err != nil {
+		log.Printf("failed to parse account id %s", vars["account_id"])
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	body := fmt.Sprintf("{\"balance\": %d}", h.balance[accountId])
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.WriteString(w, body); err != nil {
 		log.Printf("failed to write balance result, error=%s", err.Error())
@@ -46,20 +53,28 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
+	accountId, err := strconv.Atoi(vars["account_id"])
+	if err != nil {
+		log.Printf("failed to parse account id %s", vars["account_id"])
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	deposit, err := strconv.Atoi(vars["deposit"])
 	if err != nil {
 		log.Printf("failed to parse deposit %s", vars["deposit"])
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.balance += deposit
+	h.balance[accountId] += deposit
 	w.WriteHeader(http.StatusOK)
 
-	for client, ok := range h.hub.clients {
+	// at-most-once
+	topic := vars["account_id"]
+	for client, ok := range h.hub.clients[topic] {
 		if !ok {
 			continue
 		}
-		client.notify()
+		client.notify(topic)
 	}
 
 	return
@@ -67,13 +82,16 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 
 // serveWs handles websocket requests from the peer.
 func (h *Handler) ServeWs(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	topic := vars["topic"]
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	client := &Client{hub: h.hub, conn: conn, send: make(chan []byte, 256)}
-	client.hub.register <- client
+	topicClient := &TopicClient{client: client, topic: topic}
+	client.hub.register <- topicClient
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
@@ -84,14 +102,14 @@ func main() {
 	router := mux.NewRouter()
 	hub := newHub()
 	handler := Handler{
-		balance: 42,
+		balance: make(map[int]int),
 		hub:     hub,
 	}
 	go hub.run()
 
-	router.HandleFunc("/ws", handler.ServeWs)
-	router.HandleFunc("/balance", handler.GetBalance)
-	router.HandleFunc("/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
+	router.HandleFunc("/ws/{topic}", handler.ServeWs)
+	router.HandleFunc("/account/{account_id}/balance", handler.GetBalance)
+	router.HandleFunc("/account/{account_id}/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
 	router.Use(mux.CORSMethodMiddleware(router))
 	router.Use(loggingMiddleware)
 
