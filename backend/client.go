@@ -5,7 +5,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"time"
 
@@ -97,7 +96,3 @@ func (c *Client) writePump() {
 	}
 }
 
-func(c *Client) notify(topic string) {
-	log.Println("notify")
-	c.hub.broadcast <- TopicMessage{message: space, topic: topic}
-}

@@ -24,6 +24,16 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// at-most-once notification to subscribers of certain topic
+func(h *Handler) publish(topic string) {
+	for client, ok := range h.hub.clients[topic] {
+		if !ok {
+			continue
+		}
+		client.hub.broadcast <- TopicMessage{message: space, topic: topic}
+	}
+}
+
 func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 	if r.Method == http.MethodOptions {
@@ -65,17 +75,10 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.balance[accountId] += deposit
 	w.WriteHeader(http.StatusOK)
+	h.balance[accountId] += deposit
 
-	// at-most-once
-	topic := vars["account_id"]
-	for client, ok := range h.hub.clients[topic] {
-		if !ok {
-			continue
-		}
-		client.notify(topic)
-	}
+	h.publish(vars["account_id"])
 
 	return
 }
