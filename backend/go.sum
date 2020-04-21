@@ -1,0 +1,4 @@
+github.com/alexandrevicenzi/go-sse v1.5.0 h1:vyDtyDksp2kDuCnJN/2uH10gQR4dTjxIoMV88LVcj4s=
+github.com/alexandrevicenzi/go-sse v1.5.0/go.mod h1:jdrNAhMgVqP7OfcUuM8eJx0sOY17wc+girs5utpFZUU=
+github.com/gorilla/mux v1.7.4 h1:VuZ8uybHlWmqV03+zRzdwKL4tUnIp1MAQtp1mIFE1bc=
+github.com/gorilla/mux v1.7.4/go.mod h1:DVbg23sWSpFRCP0SfiEN6jmj59UnW/n46BH5rLB71So=

@@ -5,15 +5,17 @@ import (
 	"io"
 	"log"
 	"net/http"
+	//"os"
 	"strconv"
 	"time"
 
+	"github.com/alexandrevicenzi/go-sse"
 	"github.com/gorilla/mux"
 )
 
 type Handler struct {
-	balance map[int]int
-	hub     *Hub
+	balance   map[int]int
+	sseServer *sse.Server
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
@@ -25,13 +27,8 @@ func loggingMiddleware(next http.Handler) http.Handler {
 }
 
 // at-most-once notification to subscribers of certain topic
-func(h *Handler) publish(topic string) {
-	for client, ok := range h.hub.clients[topic] {
-		if !ok {
-			continue
-		}
-		client.hub.broadcast <- TopicMessage{message: space, topic: topic}
-	}
+func (h *Handler) publish(channel string) {
+	h.sseServer.SendMessage(fmt.Sprintf("/events/%s", channel), sse.SimpleMessage("tick"))
 }
 
 func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
@@ -78,39 +75,38 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	h.balance[accountId] += deposit
 
-	h.publish(vars["account_id"])
+	//h.publish(vars["account_id"])
 
 	return
 }
 
-// serveWs handles websocket requests from the peer.
-func (h *Handler) ServeWs(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	topic := vars["topic"]
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	client := &Client{hub: h.hub, conn: conn, send: make(chan []byte, 256)}
-	topicClient := &TopicClient{client: client, topic: topic}
-	client.hub.register <- topicClient
-
-	// Allow collection of memory referenced by the caller by doing all work in
-	// new goroutines.
-	go client.writePump()
-}
-
 func main() {
-	router := mux.NewRouter()
-	hub := newHub()
-	handler := Handler{
-		balance: make(map[int]int),
-		hub:     hub,
-	}
-	go hub.run()
+	sseServer := sse.NewServer(&sse.Options{
+		// Increase default retry interval to 10s.
+		//RetryInterval: 10 * 1000,
+		// CORS headers
+		Headers: map[string]string{
+			"Access-Control-Allow-Origin":  "*",
+			"Access-Control-Allow-Methods": "GET, OPTIONS",
+			"Access-Control-Allow-Headers": "Keep-Alive,X-Requested-With,Cache-Control,Content-Type,Last-Event-ID",
+		},
+		// Custom channel name generator
+		//ChannelNameFunc: func(request *http.Request) string {
+		//	return request.URL.Path
+		//},
+		// Print debug info
+		//Logger: log.New(os.Stdout, "go-sse: ", log.Ldate|log.Ltime|log.Lshortfile)
+	})
+	defer sseServer.Shutdown()
 
-	router.HandleFunc("/ws/{topic}", handler.ServeWs)
+	router := mux.NewRouter()
+
+	handler := Handler{
+		balance:   make(map[int]int),
+		sseServer: sseServer,
+	}
+
+	router.Handle("/events/{channel}", sseServer)
 	router.HandleFunc("/account/{account_id}/balance", handler.GetBalance)
 	router.HandleFunc("/account/{account_id}/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
 	router.Use(mux.CORSMethodMiddleware(router))
