@@ -16,7 +16,7 @@ const BankAccount = () => {
   const [deposit, setDeposit] = useState<number>(0);
 
   const [sendMessage, lastMessage, readyState, getWebSocket] = useWebSocket(
-    `${SOCKET_URL}/${account_id}`
+    SOCKET_URL
   );
 
   const connectionStatus = CONNECTION_STATUSES[readyState];
@@ -26,7 +26,13 @@ const BankAccount = () => {
       // getWebSocket returns the WebSocket wrapped in a Proxy.
       // This is to restrict actions like mutating a shared websocket, overwriting handlers, etc
       const currentWebsocketUrl = getWebSocket().url;
-      console.log("received a message from ", currentWebsocketUrl);
+      console.log(
+        `received message ${JSON.stringify(
+          lastMessage.data,
+          null,
+          2
+        )} from ${currentWebsocketUrl}`
+      );
     }
   }, [lastMessage]);
 

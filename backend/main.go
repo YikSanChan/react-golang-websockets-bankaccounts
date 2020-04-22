@@ -24,16 +24,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// at-most-once notification to subscribers of certain topic
-func(h *Handler) publish(topic string) {
-	for client, ok := range h.hub.clients[topic] {
-		if !ok {
-			continue
-		}
-		client.hub.broadcast <- TopicMessage{message: space, topic: topic}
-	}
-}
-
 func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 	if r.Method == http.MethodOptions {
@@ -78,23 +68,26 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	h.balance[accountId] += deposit
 
-	h.publish(vars["account_id"])
+	for client, ok := range h.hub.clients {
+		log.Println("client")
+		if !ok {
+			continue
+		}
+		client.hub.broadcast <- []byte("data")
+	}
 
 	return
 }
 
 // serveWs handles websocket requests from the peer.
 func (h *Handler) ServeWs(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	topic := vars["topic"]
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	client := &Client{hub: h.hub, conn: conn, send: make(chan []byte, 256)}
-	topicClient := &TopicClient{client: client, topic: topic}
-	client.hub.register <- topicClient
+	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
@@ -110,7 +103,7 @@ func main() {
 	}
 	go hub.run()
 
-	router.HandleFunc("/ws/{topic}", handler.ServeWs)
+	router.HandleFunc("/ws", handler.ServeWs)
 	router.HandleFunc("/account/{account_id}/balance", handler.GetBalance)
 	router.HandleFunc("/account/{account_id}/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
 	router.Use(mux.CORSMethodMiddleware(router))

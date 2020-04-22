@@ -95,4 +95,3 @@ func (c *Client) writePump() {
 		}
 	}
 }
-
