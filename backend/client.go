@@ -71,6 +71,7 @@ func (c *Client) writePump() {
 				return
 			}
 
+			// TODO: write JSON
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
@@ -95,4 +96,3 @@ func (c *Client) writePump() {
 		}
 	}
 }
-

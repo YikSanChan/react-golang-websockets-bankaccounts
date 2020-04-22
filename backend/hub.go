@@ -4,67 +4,48 @@
 
 package main
 
-type TopicMessage struct {
-	message []byte
-	topic string
-}
-
-type TopicClient struct {
-	client *Client
-	topic string
-}
-
 // Hub maintains the set of active clients and broadcasts messages to the clients.
 type Hub struct {
 	// Registered clients.
-	clients map[string]map[*Client]bool
+	clients map[*Client]bool
 
 	// Inbound messages from the clients.
-	broadcast chan TopicMessage
+	broadcast chan []byte
 
 	// Register requests from the clients.
-	register chan *TopicClient
+	register chan *Client
 
 	// Unregister requests from clients.
-	unregister chan *TopicClient
+	unregister chan *Client
 }
 
 func newHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan TopicMessage),
-		register:   make(chan *TopicClient),
-		unregister: make(chan *TopicClient),
-		clients:    make(map[string]map[*Client]bool),
+		broadcast:  make(chan []byte),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		clients:    make(map[*Client]bool),
 	}
 }
 
 func (h *Hub) run() {
 	for {
 		select {
-		case topicClient := <-h.register:
-			clients := h.clients[topicClient.topic]
-			if clients == nil {
-				clients = make(map[*Client]bool)
-				h.clients[topicClient.topic] = clients
+		case client := <-h.register:
+			h.clients[client] = true
+		case client := <-h.unregister:
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
 			}
-			h.clients[topicClient.topic][topicClient.client] = true
-		case topicClient := <-h.unregister:
-			clients := h.clients[topicClient.topic]
-			if clients != nil {
-				if _, ok := clients[topicClient.client]; ok {
-					delete(clients, topicClient.client)
-					close(topicClient.client.send)
-				}
-			}
-		case topicMessage := <-h.broadcast:
-			clients := h.clients[topicMessage.topic]
-			for client := range clients {
+			// TODO: delete this?
+		case message := <-h.broadcast:
+			for client := range h.clients {
 				select {
-				case client.send <- topicMessage.message:
+				case client.send <- message:
 				default:
 					close(client.send)
-					delete(clients, client)
-					// TODO: In https://github.com/gorilla/websocket/issues/46#issuecomment-227906715 it deletes when len(clients) == 0
+					delete(h.clients, client)
 				}
 			}
 		}
