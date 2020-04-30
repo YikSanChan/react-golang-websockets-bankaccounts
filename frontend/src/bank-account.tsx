@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { useParams } from "react-router-dom";
 
-const SOCKET_URL = "ws://localhost:8080/ws";
+const SOCKET_URL = "ws://localhost:8080/subscribe";
 const CONNECTION_STATUSES = {
   [ReadyState.CONNECTING]: "Connecting",
   [ReadyState.OPEN]: "Open",
@@ -35,12 +35,12 @@ const BankAccount = () => {
 
   const connectionStatus = CONNECTION_STATUSES[readyState];
 
-  // useEffect(() => {
-  //   if (lastMessage !== null) {
-  //     const data = JSON.parse(lastMessage.data);
-  //     setBalance(data.balance);
-  //   }
-  // }, [lastMessage]);
+  useEffect(() => {
+    if (lastMessage !== null) {
+      const data = JSON.parse(lastMessage.data);
+      setBalance(data.balance);
+    }
+  }, [lastMessage]);
 
   useEffect(() => {
     async function fetchData() {

@@ -13,7 +13,7 @@ import (
 
 type Handler struct {
 	balance map[string]int
-	hub     *Hub
+	wss     *webSocketServer
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
@@ -57,7 +57,9 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newBalance := h.balance[accountId] + deposit
-	body := fmt.Sprintf("{\"balance\": %d}", newBalance)
+	h.balance[accountId] = newBalance
+
+	body := fmt.Sprintf(`{"balance": %d}`, newBalance)
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.WriteString(w, body); err != nil {
 		log.Printf("failed to write balance result, error=%s", err.Error())
@@ -65,50 +67,21 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//for client, ok := range h.hub.clients {
-	//	log.Println("client")
-	//	if !ok {
-	//		continue
-	//	}
-	//	client.hub.broadcast <- []byte("data")
-	//}
+	msg := fmt.Sprintf(`{"account_id": "%s", "balance": %d}`, accountId, newBalance)
+	h.wss.publish([]byte(msg))
 
 	return
 }
 
-// serveWs handles websocket requests from the peer.
-func (h *Handler) ServeWs(w http.ResponseWriter, r *http.Request) {
-	active := 0
-	for _, ok := range h.hub.clients {
-		if ok {
-			active += 1
-		}
-	}
-	fmt.Printf("Serving ws to %d active clients\n", active) // TODO: figure out why ...
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	//defer conn.Close()
-	client := &Client{hub: h.hub, conn: conn, send: make(chan []byte, 256)}
-	client.hub.register <- client
-
-	// Allow collection of memory referenced by the caller by doing all work in
-	// new goroutines.
-	go client.writePump()
-}
-
 func main() {
 	router := mux.NewRouter()
-	hub := newHub()
+	wss := newWebSocketServer()
 	handler := Handler{
 		balance: make(map[string]int),
-		hub:     hub,
+		wss:     wss,
 	}
-	go hub.run()
 
-	router.HandleFunc("/ws", handler.ServeWs)
+	router.HandleFunc("/subscribe", handler.wss.subscribeHandler)
 	router.HandleFunc("/account/{account_id}/balance", handler.GetBalance)
 	router.HandleFunc("/account/{account_id}/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
 	router.Use(mux.CORSMethodMiddleware(router))
