@@ -31,9 +31,6 @@ type webSocketServer struct {
 	// Defaults to log.Printf.
 	logf func(f string, v ...interface{})
 
-	// serveMux routes the various endpoints to the appropriate handler.
-	serveMux http.ServeMux
-
 	subscribersMu sync.Mutex
 	subscribers   map[*subscriber]struct{}
 }
@@ -58,15 +55,15 @@ type subscriber struct {
 
 // subscribeHandler accepts the WebSocket connection and then subscribes
 // it to all future messages.
-func (wss *webSocketServer) subscribeHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
-		wss.logf("%v", err)
+		h.wss.logf("%v", err)
 		return
 	}
 	defer c.Close(websocket.StatusInternalError, "")
 
-	err = wss.subscribe(r.Context(), c)
+	err = h.wss.subscribe(r.Context(), c)
 	if errors.Is(err, context.Canceled) {
 		return
 	}
@@ -75,7 +72,7 @@ func (wss *webSocketServer) subscribeHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err != nil {
-		wss.logf("%v", err)
+		h.wss.logf("%v", err)
 		return
 	}
 }
@@ -88,13 +85,13 @@ func (wss *webSocketServer) subscribeHandler(w http.ResponseWriter, r *http.Requ
 //
 // It uses CloseRead to keep reading from the connection to process control
 // messages and cancel the context if the connection drops.
-func (wss *webSocketServer) subscribe(ctx context.Context, c *websocket.Conn) error {
-	ctx = c.CloseRead(ctx)
+func (wss *webSocketServer) subscribe(ctx context.Context, conn *websocket.Conn) error {
+	ctx = conn.CloseRead(ctx)
 
 	s := &subscriber{
 		msgs: make(chan []byte, wss.subscriberMessageBuffer),
 		closeSlow: func() {
-			c.Close(websocket.StatusPolicyViolation, "connection too slow to keep up with messages")
+			conn.Close(websocket.StatusPolicyViolation, "connection too slow to keep up with messages")
 		},
 	}
 	wss.addSubscriber(s)
@@ -103,7 +100,7 @@ func (wss *webSocketServer) subscribe(ctx context.Context, c *websocket.Conn) er
 	for {
 		select {
 		case msg := <-s.msgs:
-			err := writeTimeout(ctx, time.Second*5, c, msg)
+			err := writeTimeout(ctx, time.Second*5, conn, msg)
 			if err != nil {
 				return err
 			}
@@ -147,9 +144,9 @@ func (wss *webSocketServer) deleteSubscriber(s *subscriber) {
 	wss.subscribersMu.Unlock()
 }
 
-func writeTimeout(ctx context.Context, timeout time.Duration, c *websocket.Conn, msg []byte) error {
+func writeTimeout(ctx context.Context, timeout time.Duration, conn *websocket.Conn, msg []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	return c.Write(ctx, websocket.MessageText, msg)
+	return conn.Write(ctx, websocket.MessageText, msg)
 }

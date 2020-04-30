@@ -81,7 +81,7 @@ func main() {
 		wss:     wss,
 	}
 
-	router.HandleFunc("/subscribe", handler.wss.subscribeHandler)
+	router.HandleFunc("/subscribe", handler.Subscribe)
 	router.HandleFunc("/account/{account_id}/balance", handler.GetBalance)
 	router.HandleFunc("/account/{account_id}/deposit/{deposit}", handler.Deposit).Methods(http.MethodPost)
 	router.Use(mux.CORSMethodMiddleware(router))
