@@ -29,7 +29,7 @@ const BankAccount = () => {
   );
 
   const [sendMessage, lastMessage, readyState, getWebSocket] = useWebSocket(
-    `${SOCKET_URL}`,
+    SOCKET_URL,
     STATIC_OPTIONS
   );
 
